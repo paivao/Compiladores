@@ -1,0 +1,13 @@
+﻿  Skipping... (no relevant changes detected)
+  stdafx.cpp
+  Semantics.cpp
+  Analyzer.cpp
+  Generating Code...
+  Compiling...
+  LexicalAnalyzer.cpp
+  DataPool.cpp
+  Compiladores.cpp
+  Generating Code...
+c:\users\paiva\onedrive\documentos\trabalhos\compiladores\compiladores\lexicalanalyzer.cpp(33): warning C4715: 'LexicalAnalyzer::OpenSourceFile': not all control paths return a value
+  Compiladores.vcxproj -> C:\Users\paiva\OneDrive\Documentos\Trabalhos\Compiladores\Debug\Compiladores.exe
+  Compiladores.vcxproj -> C:\Users\paiva\OneDrive\Documentos\Trabalhos\Compiladores\Debug\Compiladores.pdb (Full PDB)
