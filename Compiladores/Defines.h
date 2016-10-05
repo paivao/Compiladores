@@ -5,7 +5,8 @@
 #define MAX_ID_LENGHT 128
 #define MAX_NUM_LENGTH 32
 #define MAX_STR_LENGTH 128
-#define SYNTAX_STACK_SIZE 64
+#define SYNTAX_STACK_SIZE 128
+#define SEMANTIC_STACK_SIZE 128
 
 enum class Token : unsigned int {
 	//RESERVED WORDS

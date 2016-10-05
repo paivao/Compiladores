@@ -1,115 +1,114 @@
 #include "stdafx.h"
 #include "Semantics.h"
 
-Semantics::Semantics() : primitiveTypes{ {-1, Kind::SCALAR_TYPE, nullptr}, { -1, Kind::SCALAR_TYPE, nullptr }, { -1, Kind::SCALAR_TYPE, nullptr }, { -1, Kind::SCALAR_TYPE, nullptr }, { -1, Kind::SCALAR_TYPE, nullptr } }
+Semantics::ObjectNode Semantics::primitives[5] = { Semantics::ObjectNode(-1, Kind::SCALAR_TYPE), Semantics::ObjectNode(-1, Kind::SCALAR_TYPE), Semantics::ObjectNode(-1, Kind::SCALAR_TYPE), Semantics::ObjectNode(-1, Kind::SCALAR_TYPE), Semantics::ObjectNode(-1, Kind::SCALAR_TYPE) };
+
+Semantics::Semantics()
 {
-	currentLevel = 0;
-	symbolTable.push_back(nullptr);
-	symbolTableLast.push_back(nullptr);
+	stackSize = 0;
+	symbolTable.push_back(std::make_pair(nullptr, nullptr));
 }
 
 
 Semantics::~Semantics()
 {
-	for (auto a : symbolTable)
-		delete a;
 }
 
 int Semantics::NewBlock()
 {
-	currentLevel++;
-	symbolTable.push_back(nullptr);
-	symbolTableLast.push_back(nullptr);
-	return currentLevel;
+	symbolTable.push_back(std::make_pair(nullptr, nullptr));
 }
 
 int Semantics::EndBlock()
 {
-	return --currentLevel;
+	almostDeleted = std::move(symbolTable.back());
+	symbolTable.resize(symbolTable.size() - 1);
 }
 
-ObjectNode * Semantics::Define(int name)
+Semantics::ObjectNode * Semantics::define(int name)
 {
-	ObjectNode* obj = new ObjectNode(name);
+	ObjectNode * p = new ObjectNode(name);
 
-	if (symbolTable[currentLevel]) {
-		symbolTableLast[currentLevel]->next = obj;
-		symbolTableLast[currentLevel] = obj;
+	if (symbolTable.back().first) {
+		symbolTable.back().second->next = p;
+		symbolTable.back().second = p;
 	}
 	else {
-		symbolTable[currentLevel] = symbolTableLast[currentLevel] = obj;
+		symbolTable.back().first = symbolTable.back().second = p;
 	}
-	return obj;
+	return nullptr;
 }
 
-ObjectNode * Semantics::Search(int name)
+Semantics::ObjectNode * Semantics::search(int name)
 {
-	ObjectNode* obj = symbolTable[currentLevel];
-	while (obj) {
-		if (obj->name == name)
-			break;
-		else
-			obj = obj->next;
+	ObjectNode * p = symbolTable.back().first;
+	while (p) {
+		if (p->name == name)
+			return p;
+		p = p->next;
 	}
-	return obj;
+	return nullptr;
 }
 
-ObjectNode * Semantics::Find(int name)
+Semantics::ObjectNode * Semantics::find(int name)
 {
-	ObjectNode* obj = nullptr;
-
-	for (auto a : symbolTable) {
-		obj = a;
-		while (obj) {
-			if (obj->name = name)
-				break;
-			else
-				obj = obj->next;
+	ObjectNode * p;
+	for (auto it = symbolTable.rbegin(); it != symbolTable.rend(); ++it) {
+		p = it->first;
+		while (p) {
+			if (p->name == name)
+				return p;
+			p = p->next;
 		}
-		if (obj)
-			break;
 	}
-	return obj;
+	return nullptr;
 }
 
 void Semantics::__IDU_RULE(unsigned int secondaryToken)
 {
 	SemanticNode IDU;
-	IDU.nont = NonTerminal::IDU;
-	IDU._.ID.name = secondaryToken;
+	ObjectNode * p = find(secondaryToken);
 
-	if (!(IDU._.ID.obj = Find(secondaryToken))) {
+	if (!p) {
 		Error(ErrorType::NOT_DECLARED);
-		IDU._.ID.obj = Define(secondaryToken);
+		p = define(secondaryToken);
 	}
 
-	semanticStack.push_back(IDU);
+	IDU.nont = NonTerminal::IDU;
+	IDU.asID().name = secondaryToken;
+	IDU.asID().obj = p;
+
+	pushSemantic(IDU);
 }
 
 void Semantics::__IDD_RULE(unsigned int secondaryToken)
 {
 	SemanticNode IDD;
 	IDD.nont = NonTerminal::IDD;
-	IDD._.ID.name = secondaryToken;
 
-	if (IDD._.ID.obj = Search(secondaryToken)) {
+	ObjectNode * p;
+
+	if (p = search(secondaryToken)) {
 		Error(ErrorType::REDECLATION);
 	}
 	else {
-		IDD._.ID.obj = Define(secondaryToken);
+		p = define(secondaryToken);
 	}
 
-	semanticStack.push_back(IDD);
+	IDD.asID().name = secondaryToken;
+	IDD.asID().obj = p;
+
+	pushSemantic(IDD);
 }
 
 void Semantics::__ID_RULE(unsigned int secondaryToken)
 {
 	SemanticNode ID;
 	ID.nont = NonTerminal::ID;
-	ID._.ID.name = secondaryToken;
-	ID._.ID.obj = nullptr;
+	ID.asID().name = secondaryToken;
+	ID.asID().obj = nullptr;
 
-	semanticStack.push_back(ID);
+	pushSemantic(ID);
 }
 
 void Semantics::__NB_RULE()
@@ -129,81 +128,135 @@ void Semantics::__DF_RULE()
 
 void Semantics::__TYPE_INT()
 {
-	SemanticNode type;
-	type.nont = NonTerminal::TP;
-	type._.T.type = &primitiveTypes[INT];
-	semanticStack.push_back(type);
+	SemanticNode TP;
+	TP.nont = NonTerminal::TP;
+	TP.asT().type = getPrimitive(INT);
+
+	pushSemantic(TP);
 }
 
 void Semantics::__TYPE_CHR()
 {
-	SemanticNode type;
-	type.nont = NonTerminal::TP;
-	type._.T.type = &primitiveTypes[CHAR];
-	semanticStack.push_back(type);
+	SemanticNode TP;
+	TP.nont = NonTerminal::TP;
+	TP.asT().type = getPrimitive(CHAR);
+
+	pushSemantic(TP);
 }
 
 void Semantics::__TYPE_STR()
 {
-	SemanticNode type;
-	type.nont = NonTerminal::TP;
-	type._.T.type = &primitiveTypes[STRING];
-	semanticStack.push_back(type);
+	SemanticNode TP;
+	TP.nont = NonTerminal::TP;
+	TP.asT().type = getPrimitive(STRING);
+
+	pushSemantic(TP);
 }
 
 void Semantics::__TYPE_BOL()
 {
-	SemanticNode type;
-	type.nont = NonTerminal::TP;
-	type._.T.type = &primitiveTypes[BOOL];
-	semanticStack.push_back(type);
+	SemanticNode TP;
+	TP.nont = NonTerminal::TP;
+	TP.asT().type = getPrimitive(BOOL);
+
+	pushSemantic(TP);
 }
 
 void Semantics::__TYPE_IDU()
 {
 	SemanticNode T;
-	SemanticNode IDU = semanticStack.back();
-	semanticStack.pop_back();
-	ObjectNode * p = IDU._.ID.obj;
+	SemanticNode& IDU = getSemantic(0);
+	popSemantic(1);
+	ObjectNode * p = IDU.asID().obj;
 	if (isKindType(p->kind) || p->kind == Kind::UNIVERSAL) {
-		T._.T.type = p;
+		T.asT().type = p;
 	}
 	else {
-		T._.T.type = &primitiveTypes[UNIVERSAL];
+		T.asT().type = getPrimitive(UNIVERSAL);
 		Error(ErrorType::TYPE_EXPECTED);
 	}
-	semanticStack.push_back(T);
+	pushSemantic(T);
 }
 
 void Semantics::__LI()
 {
-	SemanticNode LI1 = semanticStack.back();
-	semanticStack.pop_back();
+	SemanticNode LI1 = getSemantic(0);
+	popSemantic(1);
 	SemanticNode LI0;
-	LI0._.LI.list = LI1._.LI.list;
-	semanticStack.push_back(LI0);
+	LI0.nont = NonTerminal::LI;
+	LI0.asL().list = LI1.asL().list;
+	pushSemantic(LI0);
 }
 
 void Semantics::__LI_TAIL()
 {
-	SemanticNode IDD = semanticStack.back();
-	semanticStack.pop_back();
+	SemanticNode IDD = getSemantic(0);
+	popSemantic(1);
 	SemanticNode LI;
-	LI._.LI.list = IDD._.ID.obj;
-	semanticStack.push_back(LI);
+	LI.nont = NonTerminal::LI;
+	LI.asL().list = IDD.asID().obj;
+	pushSemantic(LI);
 }
 
 void Semantics::__DV()
 {
-	SemanticNode TP, LI;
-	TP = semanticStack.back();
-	LI = semanticStack.at(semanticStack.size() - 2);
-	semanticStack.resize(semanticStack.size() - 2);
-	ObjectNode * p;
+	SemanticNode TP = getSemantic(0);
+	SemanticNode LI = getSemantic(1);
+	popSemantic(2);
+	ObjectNode * p = LI.asL().list;
 	while (p != nullptr && p->kind == Kind::NO_KIND_DEF) {
 		p->kind = Kind::VAR;
-		
+		p->asVar().type = TP.asT().type;
+		p = p->next;
 	}
+}
+
+void Semantics::__TRUE()
+{
+	SemanticNode TRUE;
+	TRUE.nont = NonTerminal::TRUE;
+	TRUE.asBool().type = getPrimitive(BOOL);
+	TRUE.asBool().val = true;
+	pushSemantic(TRUE);
+}
+
+void Semantics::__FALSE()
+{
+	SemanticNode FALSE;
+	FALSE.nont = NonTerminal::FALSE;
+	FALSE.asBool().type = getPrimitive(BOOL);
+	FALSE.asBool().val = false;
+	pushSemantic(FALSE);
+}
+
+void Semantics::__CHAR(unsigned int secondaryToken)
+{
+	SemanticNode CHR;
+	CHR.nont = NonTerminal::CHR;
+	CHR.asChr().type = getPrimitive(CHAR);
+	CHR.asChr().pos = secondaryToken;
+	CHR.asChr().val = DataPool::GetCharConst(secondaryToken);
+	pushSemantic(CHR);
+}
+
+void Semantics::__STRING(unsigned int secondaryToken)
+{
+	SemanticNode STR;
+	STR.nont = NonTerminal::STR;
+	STR.asStr().type = getPrimitive(STRING);
+	STR.asStr().pos = secondaryToken;
+	STR.asStr().val = &DataPool::GetStringConst(secondaryToken);
+	pushSemantic(STR);
+}
+
+void Semantics::__NUMERAL(unsigned int secondaryToken)
+{
+	SemanticNode NUM;
+	NUM.nont = NonTerminal::NUM;
+	NUM.asNum().type = getPrimitive(INT);
+	NUM.asNum().pos = secondaryToken;
+	NUM.asNum().val = DataPool::GetIntConst(secondaryToken);
+	pushSemantic(NUM);
 }
 
 void Semantics::Error(ErrorType code)
@@ -219,6 +272,8 @@ void Semantics::Error(ErrorType code)
 		std::cout << "Erro semantico desconhecido!" << std::endl;
 	}
 }
+
+
 
 void Semantics::operator()(Rules rule, unsigned int secondaryToken)
 {
@@ -252,4 +307,113 @@ void Semantics::operator()(Rules rule, unsigned int secondaryToken)
 	//default:
 		//Error(ErrorType::INVALID_RULE);
 	}
+
 }
+
+inline void Semantics::pushSemantic(SemanticNode& node)
+{
+	semanticStack[stackSize++] = node;
+}
+
+inline Semantics::SemanticNode& Semantics::getSemantic(size_t rpos)
+{
+	return semanticStack[stackSize - rpos - 1];
+}
+
+inline void Semantics::popSemantic(size_t qtd)
+{
+	stackSize -= qtd;
+}
+
+/*
+ObjectList::ObjectNode * ObjectList::Define(int name)
+{
+	ObjectNode* obj = new ObjectNode(name);
+
+	if (last) {
+		obj->prev = last;
+		last->next = obj;
+		last = obj;
+	}
+	else {
+		first = last = obj;
+	}
+
+	return obj;
+}
+
+ObjectList::ObjectNode * ObjectList::Search(int name)
+{
+	ObjectNode * obj = first;
+
+	while (obj) {
+		if (obj->name == name)
+			break;
+		else
+			obj = obj->next;
+	}
+
+	return obj;
+}
+
+ObjectList::ObjectNode * ObjectList::getPrimitive(PrimitiveIndex idx)
+{
+	return &primitives[idx];
+}
+
+ObjectList::ObjectNode * ObjectList::setVar(ObjectNode * node, ObjectNode * type)
+{
+	if (node->kind != Kind::NO_KIND_DEF)
+		return nullptr;
+
+	VPFObjectNode * newNode = new VPFObjectNode(node->name, type, Kind::VAR);
+
+	newNode->prev = node->prev;
+	newNode->next = node->next;
+	node->next = node->prev = nullptr;
+
+	if (node->prev)
+		node->prev->next = newNode;
+	else
+		first = newNode;
+
+	if (node->next)
+		node->next->prev = newNode;
+	else
+		last = newNode;
+
+	delete node;
+	return newNode;
+}
+
+ObjectList::ObjectNode * ObjectList::setParam(ObjectNode * node, ObjectNode * type)
+{
+	return nullptr;
+}
+
+ObjectList::ObjectNode * ObjectList::setField(ObjectNode * node, ObjectNode * type)
+{
+	return nullptr;
+}
+
+ObjectList::ObjectNode * ObjectList::setFunction(ObjectNode * node, ObjectNode * ret, ObjectNode * params)
+{
+	return nullptr;
+}
+
+ObjectList::ObjectNode * ObjectList::setArray(ObjectNode * node, ObjectNode * elemType, int numElems)
+{
+	return nullptr;
+}
+
+ObjectList::ObjectNode * ObjectList::setStruct(ObjectNode * node, ObjectNode * fields)
+{
+	return nullptr;
+}
+
+ObjectList::ObjectNode * ObjectList::setAlias(ObjectNode * node, ObjectNode * base)
+{
+	return nullptr;
+}
+*/
+
